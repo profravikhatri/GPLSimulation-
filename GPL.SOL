@@ -1,0 +1,147 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
+
+import \"@openzeppelin/contracts/governance/Governor.sol\";
+import \"@openzeppelin/contracts/governance/compatibility/GovernorCompatibilityBravo.sol\";
+import \"@openzeppelin/contracts/governance/extensions/GovernorVotes.sol\";
+import \"@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol\";
+import \"@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol\";
+import \"@openzeppelin/contracts/token/ERC20/IERC20.sol\";
+
+contract GovernedPrivacyLayer is Governor, GovernorCompatibilityBravo, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl {
+    IERC20 private immutable _token;
+    uint256 public alpha;
+    uint256 public lastUpdated;
+
+    event PrivacyUpdated(uint256 newAlpha, uint256 timestamp);
+
+    constructor(ERC20Votes token, TimelockController timelock)
+        Governor(\"GovernedPrivacyLayer\")
+        GovernorVotes(token)
+        GovernorVotesQuorumFraction(4)
+        GovernorTimelockControl(timelock)
+    {
+        _token = token;
+        alpha = 50;  // Default medium privacy (0.5 normalized)
+        lastUpdated = block.timestamp;
+    }
+
+    function propose(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        string memory description
+    ) public override(Governor, IGovernor) returns (uint256) {
+        return super.propose(targets, values, calldatas, description);
+    }
+
+    function _updatePrivacy(uint256 newAlpha) internal {
+        require(newAlpha <= 100, \"GPL: Alpha must be <= 100\");
+        alpha = newAlpha;
+        lastUpdated = block.timestamp;
+        emit PrivacyUpdated(newAlpha, block.timestamp);
+    }
+
+    function governanceEfficiency() public view returns (uint256) {
+        // Simulated: governance drops as privacy increases
+        return 92 - (uint256(41) * alpha) / 100;
+    }
+
+    function verificationDelay() public view returns (uint256) {
+        // Increases with privacy level
+        return 5 + (uint256(40) * alpha) / 100;
+    }
+
+    function privacyUtility() public view returns (uint256) {
+        // Utility decreases as privacy increases
+        return 85 - (uint256(44) * alpha) / 100;
+    }
+
+    function conflictReduction() public view returns (uint256) {
+        // High reduction at medium alpha
+        return 62 - (uint256(52) * (alpha - 50)**2) / 2500;
+    }
+
+    function throughput() public view returns (uint256) {
+        return 150 - verificationDelay() * 2;
+    }
+
+    function complianceScore() public view returns (uint256) {
+        return 75 + (uint256(25) * (100 - abs(alpha - 50))) / 100;
+    }
+
+    function abs(int256 x) internal pure returns (uint256) {
+        return x >= 0 ? uint256(x) : uint256(-x);
+    }
+
+    function version() public pure override returns (string memory) {
+        return \"GPL-1.0\";
+    }
+
+    // The functions below are overrides required by Solidity.
+
+    function votingDelay() public pure override returns (uint256) {
+        return 1; // 1 block
+    }
+
+    function votingPeriod() public pure override returns (uint256) {
+        return 45818; // ~1 week
+    }
+
+    function quorum(uint256 blockNumber)
+        public
+        view
+        override(IGovernor, GovernorVotesQuorumFraction)
+        returns (uint256)
+    {
+        return quorumFraction() * totalSupplyAt(blockNumber) / 100;
+    }
+
+    function state(
+        uint256 proposalId
+    )
+        public
+        view
+        override(Governor, IGovernor, GovernorTimelockControl)
+        returns (ProposalState)
+    {
+        return super.state(proposalId);
+    }
+
+    function propose(
+        address target,
+        uint256 value,
+        bytes calldata data,
+        string calldata description
+    ) public returns (uint256) {
+        return _propose(target, value, data, keccak256(bytes(description)));
+    }
+
+    function _execute(
+        uint256 proposalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) {
+        super._execute(proposalId, targets, values, calldatas, descriptionHash);
+    }
+
+    function _cancel(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) returns (uint256) {
+        return super._cancel(targets, values, calldatas, descriptionHash);
+    }
+
+    function _executor()
+        internal
+        view
+        override(Governor, GovernorTimelockControl)
+        returns (address)
+    {
+        return super._executor();
+    }
+}
