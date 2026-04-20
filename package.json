@@ -1,0 +1,12 @@
+{
+  "name": "gpl-research-validation",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "npx hardhat test",
+    "compare": "node scripts/compare.js"
+  },
+  "devDependencies": {
+    "hardhat": "^2.20.0",
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0"
+  }
+}
